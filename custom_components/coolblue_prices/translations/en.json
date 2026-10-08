@@ -1,0 +1,123 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Coolblue Energie",
+        "description": "Sign in with your Coolblue account (the one you use on coolblue.nl).",
+        "data": {
+          "email": "Email address",
+          "password": "Password"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate",
+        "description": "Coolblue no longer accepts the stored password for {email}.",
+        "data": {
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid email or password.",
+      "cannot_connect": "Cannot connect to Coolblue. Please try again later."
+    },
+    "abort": {
+      "already_configured": "This Coolblue contract is already configured.",
+      "reauth_successful": "Re-authentication successful."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Price settings",
+        "data": {
+          "price_mode": "What does Coolblue's price include?",
+          "purchase_fee": "Purchase fee (€/kWh, excl. VAT)",
+          "energy_tax": "Energy tax (€/kWh, excl. VAT)",
+          "vat": "VAT (%)",
+          "block_hours": "Cheapest block length (hours)",
+          "gas_price_fallback": "Fallback gas price (€/m³, 0 = none)"
+        },
+        "data_description": {
+          "price_mode": "Choose 'all-in' if the price in the Coolblue app matches what the integration shows.",
+          "purchase_fee": "From your contract. Subtracted from the feed-in price."
+        }
+      }
+    }
+  },
+  "selector": {
+    "price_mode": {
+      "options": {
+        "all_in": "All-in (incl. purchase fee, energy tax and VAT)",
+        "market": "Bare market price (EPEX, excl. everything)"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "current_price": {
+        "name": "Electricity price"
+      },
+      "next_price": {
+        "name": "Next electricity price"
+      },
+      "feed_in_price": {
+        "name": "Feed-in price"
+      },
+      "min_price_today": {
+        "name": "Lowest price today"
+      },
+      "max_price_today": {
+        "name": "Highest price today"
+      },
+      "average_price_today": {
+        "name": "Average price today"
+      },
+      "cheapest_block_start": {
+        "name": "Cheapest block start"
+      },
+      "gas_price": {
+        "name": "Gas price"
+      }
+    },
+    "binary_sensor": {
+      "cheapest_block_active": {
+        "name": "In cheapest block"
+      }
+    }
+  },
+  "services": {
+    "get_prices": {
+      "name": "Get prices",
+      "description": "Returns all known prices for today and tomorrow.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Contract",
+          "description": "Optional, if you have several contracts."
+        },
+        "kind": {
+          "name": "Kind",
+          "description": "consumption / feed_in"
+        }
+      }
+    },
+    "find_cheapest_block": {
+      "name": "Find cheapest block",
+      "description": "Finds the cheapest contiguous block of the given duration from now.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Contract",
+          "description": "Optional."
+        },
+        "duration": {
+          "name": "Duration",
+          "description": "E.g. 02:00:00 for the dishwasher."
+        },
+        "end_before": {
+          "name": "End before",
+          "description": "The block must end before this time."
+        }
+      }
+    }
+  }
+}

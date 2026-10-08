@@ -1,0 +1,123 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Coolblue Energie",
+        "description": "Log in met je Coolblue-account (hetzelfde als op coolblue.nl).",
+        "data": {
+          "email": "E-mailadres",
+          "password": "Wachtwoord"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Opnieuw inloggen",
+        "description": "Coolblue accepteert het opgeslagen wachtwoord voor {email} niet meer.",
+        "data": {
+          "password": "Wachtwoord"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Onjuist e-mailadres of wachtwoord.",
+      "cannot_connect": "Kan geen verbinding maken met Coolblue. Probeer het later opnieuw."
+    },
+    "abort": {
+      "already_configured": "Dit Coolblue-contract is al ingesteld.",
+      "reauth_successful": "Opnieuw ingelogd."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Prijsinstellingen",
+        "data": {
+          "price_mode": "Wat bevat Coolblue's prijs?",
+          "purchase_fee": "Inkoopvergoeding (€/kWh, excl. btw)",
+          "energy_tax": "Energiebelasting (€/kWh, excl. btw)",
+          "vat": "Btw (%)",
+          "block_hours": "Lengte goedkoopste blok (uren)",
+          "gas_price_fallback": "Vaste gasprijs als reserve (€/m³, 0 = geen)"
+        },
+        "data_description": {
+          "price_mode": "Kies 'all-in' als de prijs in de Coolblue-app gelijk is aan wat de integratie toont.",
+          "purchase_fee": "Staat in je contract. Wordt van de terugleverprijs afgetrokken."
+        }
+      }
+    }
+  },
+  "selector": {
+    "price_mode": {
+      "options": {
+        "all_in": "All-in (incl. inkoopvergoeding, energiebelasting en btw)",
+        "market": "Kale marktprijs (EPEX, excl. alles)"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "current_price": {
+        "name": "Stroomprijs"
+      },
+      "next_price": {
+        "name": "Stroomprijs volgend uur"
+      },
+      "feed_in_price": {
+        "name": "Terugleverprijs"
+      },
+      "min_price_today": {
+        "name": "Laagste prijs vandaag"
+      },
+      "max_price_today": {
+        "name": "Hoogste prijs vandaag"
+      },
+      "average_price_today": {
+        "name": "Gemiddelde prijs vandaag"
+      },
+      "cheapest_block_start": {
+        "name": "Start goedkoopste blok"
+      },
+      "gas_price": {
+        "name": "Gasprijs"
+      }
+    },
+    "binary_sensor": {
+      "cheapest_block_active": {
+        "name": "In goedkoopste blok"
+      }
+    }
+  },
+  "services": {
+    "get_prices": {
+      "name": "Prijzen ophalen",
+      "description": "Geeft alle bekende prijzen van vandaag en morgen terug.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Contract",
+          "description": "Optioneel, als je meer contracten hebt."
+        },
+        "kind": {
+          "name": "Soort",
+          "description": "consumption / feed_in"
+        }
+      }
+    },
+    "find_cheapest_block": {
+      "name": "Goedkoopste blok zoeken",
+      "description": "Zoekt het goedkoopste aaneengesloten blok van de opgegeven duur vanaf nu.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Contract",
+          "description": "Optioneel."
+        },
+        "duration": {
+          "name": "Duur",
+          "description": "Bijv. 02:00:00 voor de vaatwasser."
+        },
+        "end_before": {
+          "name": "Klaar vóór",
+          "description": "Het blok moet vóór dit tijdstip eindigen."
+        }
+      }
+    }
+  }
+}

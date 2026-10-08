@@ -1,0 +1,16 @@
+{
+  "domain": "coolblue_prices",
+  "name": "Coolblue Energie Prijzen",
+  "codeowners": [
+    "@MaikelvdB07"
+  ],
+  "config_flow": true,
+  "documentation": "https://github.com/MaikelvdB07/ha-coolblue-energie",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/MaikelvdB07/ha-coolblue-energie/issues",
+  "requirements": [
+    "beautifulsoup4>=4.0.0,<5.0.0"
+  ],
+  "version": "0.1.0"
+}

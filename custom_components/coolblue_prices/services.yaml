@@ -1,0 +1,32 @@
+get_prices:
+  fields:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: coolblue_prices
+    kind:
+      required: false
+      default: consumption
+      selector:
+        select:
+          options:
+            - consumption
+            - feed_in
+
+find_cheapest_block:
+  fields:
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: coolblue_prices
+    duration:
+      required: true
+      example: "02:00:00"
+      selector:
+        duration:
+    end_before:
+      required: false
+      selector:
+        datetime:
