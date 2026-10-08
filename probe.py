@@ -50,6 +50,20 @@ def _mask(text: str, *secrets: str) -> str:
     return text
 
 
+def _err(err: Exception) -> str:
+    """Describe an error without request/response headers (they hold session cookies)."""
+    status = getattr(err, "status", None)
+    if status is not None:
+        return f"HTTP {status} {getattr(err, 'message', '')}".strip()
+    return f"{type(err).__name__}: {err}"
+
+
+def _scrub(text: str) -> str:
+    """Last line of defence: strip anything that looks like a cookie value."""
+    text = re.sub(r"((?:Set-)?Cookie'?\s*:\s*')[^']*", r"\1***", text, flags=re.IGNORECASE)
+    return re.sub(r"((?:Coolblue-Session|Secure-Coolblue|_csrfSecret)=)[^;'\"\s]+", r"\1***", text)
+
+
 def _short(rows, n=3):
     return {"count": len(rows) if isinstance(rows, list) else None,
             "first_rows": rows[:n] if isinstance(rows, list) else rows}
@@ -81,8 +95,8 @@ async def main() -> None:
                         print(f"{label:9} stroom: {len(rows)} rijen, {len(slots)} prijzen"
                               + (f" (bijv. {slots[0].start:%H:%M} = €{slots[0].price:.4f})" if slots else ""))
                 except Exception as err:  # noqa: BLE001
-                    out[key] = {"error": repr(err)}
-                    print(f"{label:9} {commodity}: fout {err!r}")
+                    out[key] = {"error": _err(err)}
+                    print(f"{label:9} {commodity}: fout {_err(err)}")
 
         # Quarter-hour granularity, just to see if the portal supports it.
         for gran in ("QUARTER_HOUR", "QUARTER"):
@@ -91,7 +105,7 @@ async def main() -> None:
                 out[f"today_electricity_{gran}"] = _short(rows, 2)
                 print(f"granularity={gran}: {len(rows)} rijen")
             except Exception as err:  # noqa: BLE001
-                out[f"today_electricity_{gran}"] = {"error": repr(err)}
+                out[f"today_electricity_{gran}"] = {"error": _err(err)}
 
         # Look for other price-related API calls in the portal pages.
         session = await api._auth.get_session()
@@ -107,7 +121,7 @@ async def main() -> None:
                     html = await r.text()
                     out.setdefault("pages", {})[url] = r.status
             except Exception as err:  # noqa: BLE001
-                out.setdefault("pages", {})[url] = repr(err)
+                out.setdefault("pages", {})[url] = _err(err)
                 continue
             for m in re.findall(r'/api/[A-Za-z0-9_\-/]+', html):
                 found.add(m)
@@ -115,7 +129,7 @@ async def main() -> None:
                 found.add(f"key:{m}")
         out["api_paths_and_price_keys"] = sorted(found)
 
-    text = _mask(json.dumps(out, indent=2, default=str), debtor, location)
+    text = _scrub(_mask(json.dumps(out, indent=2, default=str), debtor, location))
     (HERE / "probe_output.json").write_text(text)
     print("\nKlaar: probe_output.json geschreven.")
 
