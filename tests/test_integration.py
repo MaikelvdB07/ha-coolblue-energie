@@ -216,3 +216,29 @@ async def test_setup_and_sensors(hass: HomeAssistant, freezer: FrozenDateTimeFac
         assert active.state == "on"
 
         assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_options_flow(hass: HomeAssistant):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="123_abc",
+        data={"email": "a@b.nl", "password": "x", "debtor_id": "123", "location_id": "abc"},
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert result["type"] == "form"
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "price_mode": "all_in",
+            "purchase_fee": 0.016528,
+            "energy_tax": 0.09161,
+            "vat": 21,
+            "block_hours": 3,
+            "gas_price_fallback": 1.817009,
+        },
+    )
+    assert result["type"] == "create_entry"
+    assert entry.options["purchase_fee"] == pytest.approx(0.016528)
