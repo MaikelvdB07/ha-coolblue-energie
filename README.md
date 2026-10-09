@@ -110,7 +110,7 @@ series:
 ```
 
 - **Vandaag en morgen:** de grafiek toont 48 uur vanaf middernacht. De prijzen voor
-  morgen verschijnen zodra Coolblue ze publiceert (meestal rond 15:00); tot die tijd
+  morgen verschijnen zodra Coolblue ze publiceert (dagelijks vanaf 14:30); tot die tijd
   is de rechterhelft leeg.
 - **Kleuren:** groen onder €0,20, oranje tot €0,28, rood daarboven. Pas de grenzen aan
   naar wat voor jou goedkoop en duur is.
@@ -124,7 +124,7 @@ series:
 Wil je een staafgrafiek met kleuren per prijsniveau, de laagste en hoogste prijs van de komende
 uren en een lijn bij "nu"? Gebruik dan de
 [Plotly Graph Card](https://github.com/dbuezas/lovelace-plotly-graph-card) (installeren via
-**HACS → Frontend**, zoek "plotly"). De kaart toont 6 uur terug en 12 uur vooruit, dus na ±15:00
+**HACS → Frontend**, zoek "plotly"). De kaart toont 6 uur terug en 12 uur vooruit, dus vanaf 14:30
 ook de eerste uren van morgen.
 
 ```yaml
@@ -331,7 +331,7 @@ layout:
     showline: false
     dtick: 3600000
   annotations: >-
-    $fn ({vars}) => vars.available ? [] : [{text: 'Prijzen voor morgen komen meestal rond 15:00',
+    $fn ({vars}) => vars.available ? [] : [{text: 'Prijzen voor morgen komen vanaf 14:30',
     xref: 'paper', yref: 'paper', x: 0.5, y: 0.5, showarrow: false, font: {size: 14, color: 'gray'}}]
 config:
   displayModeBar: false
