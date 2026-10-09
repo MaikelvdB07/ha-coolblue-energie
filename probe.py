@@ -79,6 +79,20 @@ async def main() -> None:
         debtor, location = await api.get_energy_ids()
         print("Ingelogd. Contract gevonden.")
 
+        try:
+            dashboard = await api.get_dashboard_prices()
+            out["dashboard_prices"] = {
+                str(day): [s.as_dict() for s in slots] for day, slots in dashboard.items()
+            }
+            for day, slots in dashboard.items():
+                avg = sum(s.price for s in slots) / len(slots)
+                print(f"dashboard {day}: {len(slots)} prijzen, gemiddeld €{avg:.4f}")
+            if not dashboard:
+                print("dashboard: geen dynamicPrices gevonden")
+        except Exception as err:  # noqa: BLE001
+            out["dashboard_prices"] = {"error": _err(err)}
+            print(f"dashboard: fout {_err(err)}")
+
         today = date.today()
         days = {"yesterday": today - timedelta(days=1), "today": today,
                 "tomorrow": today + timedelta(days=1)}

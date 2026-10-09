@@ -4,8 +4,9 @@ Custom integration die de dynamische stroomprijzen uit je **eigen Coolblue-accou
 haalt (dezelfde bron als de Coolblue-app) en ze als sensoren in Home Assistant zet.
 
 > Coolblue heeft geen officiële API. Deze integratie logt in zoals de website dat doet
-> en leest de ongedocumenteerde endpoint `/api/insights`. Als Coolblue het portaal
-> aanpast, kan de integratie breken. De login is overgenomen uit
+> en leest de all-in uurprijzen (incl. belastingen) die het Coolblue Energie-dashboard
+> zelf toont. De ongedocumenteerde endpoint `/api/insights` dient als reserve en levert
+> de gasgegevens. Als Coolblue het portaal aanpast, kan de integratie breken. De login is overgenomen uit
 > [barisdemirdelen/homeassistant-coolblue-energy](https://github.com/barisdemirdelen/homeassistant-coolblue-energy)
 > (MIT).
 
@@ -14,7 +15,7 @@ haalt (dezelfde bron als de Coolblue-app) en ze als sensoren in Home Assistant z
 Voordat je de integratie in HA zet, kijk je beter eerst wat Coolblue voor jouw contract teruggeeft:
 
 ```bash
-cd "~/Claude/Projects/Coolblue Energy HA"
+cd ~/Claude/Projects/"Coolblue Energy HA"
 python3 -m venv .venv
 .venv/bin/pip install aiohttp beautifulsoup4
 .venv/bin/python probe.py
@@ -54,6 +55,67 @@ Handmatig kan ook: kopieer `custom_components/coolblue_prices` naar `/config/cus
 | `sensor.coolblue_energie_gasprijs` | Gasprijs van gisteren (kosten gedeeld door verbruik), of de vaste reserveprijs |
 
 De entity-ID's hangen af van de taal van je HA. Met Engelse namen heten ze bijvoorbeeld `sensor.coolblue_energie_electricity_price`.
+
+## Grafiek
+
+Voor een prijsgrafiek van vandaag en morgen gebruik je de
+[ApexCharts Card](https://github.com/RomRider/apexcharts-card) (installeren via
+**HACS → Frontend**, zoek "apexcharts-card"). Voeg daarna een kaart toe op je dashboard,
+kies **Handmatig** en plak:
+
+```yaml
+type: custom:apexcharts-card
+header:
+  show: true
+  title: Stroomprijs
+  show_states: true
+  colorize_states: true
+graph_span: 48h
+span:
+  start: day
+now:
+  show: true
+  label: Nu
+experimental:
+  color_threshold: true
+yaxis:
+  - decimals: 2
+    min: ~0
+apex_config:
+  legend:
+    show: false
+  tooltip:
+    x:
+      format: "ddd HH:mm"
+series:
+  - entity: sensor.coolblue_energie_stroomprijs
+    name: Nu
+    type: column
+    unit: €/kWh
+    float_precision: 3
+    color_threshold:
+      - value: -1
+        color: "#2e7d32"
+      - value: 0.20
+        color: "#f9a825"
+      - value: 0.28
+        color: "#c62828"
+    data_generator: |
+      return [
+        ...entity.attributes.prices_today,
+        ...entity.attributes.prices_tomorrow,
+      ].map((p) => [new Date(p.start).getTime(), p.price]);
+```
+
+- **Vandaag en morgen:** de grafiek toont 48 uur vanaf middernacht. De prijzen voor
+  morgen verschijnen zodra Coolblue ze publiceert (meestal rond 15:00); tot die tijd
+  is de rechterhelft leeg.
+- **Kleuren:** groen onder €0,20, oranje tot €0,28, rood daarboven. Pas de grenzen aan
+  naar wat voor jou goedkoop en duur is.
+- **Entity-ID:** heet je sensor anders (bijvoorbeeld `sensor.coolblue_energie_electricity_price`
+  bij een Engelstalige HA), pas dan `entity:` aan.
+- **Zonder extra kaart:** de standaard *Geschiedenisgrafiek* met de stroomprijs-sensor
+  laat de prijzen uit het verleden zien, maar niet die van de komende uren.
 
 ## Acties
 

@@ -11,7 +11,14 @@ from freezegun.api import FrozenDateTimeFactory
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.coolblue_prices.api import gas_price_from_rows, parse_price_rows
+import json
+
+from custom_components.coolblue_prices.api import (
+    extract_rsc,
+    gas_price_from_rows,
+    parse_dynamic_prices,
+    parse_price_rows,
+)
 from custom_components.coolblue_prices.const import DOMAIN
 from custom_components.coolblue_prices.pricing import (
     PriceSettings,
@@ -45,6 +52,40 @@ def test_parse_dst_days():
     autumn = parse_price_rows([{"dynamicPrice": 0.1}] * 24, date(2026, 10, 25))
     # Contiguous: every slot ends where the next begins.
     assert all(a.end == b.start for a, b in zip(autumn, autumn[1:]))
+
+
+def _dashboard_html(day: date, prices: list[float]) -> str:
+    """A dashboard page shaped like the real one: RSC rows in __next_f.push chunks."""
+    start = datetime(day.year, day.month, day.day, tzinfo=TZ).astimezone(ZoneInfo("UTC"))
+    rows = [
+        {"timestamp": (start + timedelta(hours=i)).strftime("%Y-%m-%dT%H:%M:%SZ"), "dynamicPrice": p}
+        for i, p in enumerate(prices)
+    ]
+    rsc = '1:"$Sreact.fragment"\n1d:["$","div",null,' + json.dumps(
+        {"energyInsightsUrl": "/x", "initialReportStatus": None, "dynamicPrices": rows}
+    ) + "]\n"
+    # Split mid-row, as Next.js streaming may do.
+    cut = len(rsc) // 2
+    return "".join(
+        f"<script>self.__next_f.push([1,{json.dumps(part)}])</script>" for part in (rsc[:cut], rsc[cut:])
+    )
+
+
+def test_parse_dashboard_prices():
+    prices = [0.2817, 0.25541] + [0.24] * 21 + [-0.01]
+    days = parse_dynamic_prices(extract_rsc(_dashboard_html(date(2026, 10, 9), prices)))
+    slots = days[date(2026, 10, 9)]
+    assert list(days) == [date(2026, 10, 9)]
+    assert len(slots) == 24
+    assert slots[0].start == datetime(2026, 10, 9, 0, tzinfo=TZ)
+    assert slots[0].price == 0.2817 and slots[-1].price == -0.01
+    assert slots[-1].end == datetime(2026, 10, 10, 0, tzinfo=TZ)
+    # Today and tomorrow in one array are split per day.
+    both = _dashboard_html(date(2026, 10, 9), [0.2] * 48)
+    assert [len(v) for v in parse_dynamic_prices(extract_rsc(both)).values()] == [24, 24]
+    # Missing or unpublished data.
+    assert parse_dynamic_prices("") == {}
+    assert parse_dynamic_prices(extract_rsc(_dashboard_html(date(2026, 10, 9), [0] * 24))) == {}
 
 
 def test_parse_quarter_hours():
@@ -107,9 +148,13 @@ async def test_setup_and_sensors(hass: HomeAssistant, freezer: FrozenDateTimeFac
     today[15] = today[16] = 0.05  # cheap afternoon: 15:00-17:00
     tomorrow = [0.25] * 24
 
+    async def fake_rsc(url):
+        # The dashboard only has today; tomorrow must come from /api/insights.
+        return extract_rsc(_dashboard_html(date(2026, 10, 8), today))
+
     async def fake_insights(debtor, location, day, commodity, granularity="HOUR"):
         if commodity == "electricity":
-            prices = today if day == date(2026, 10, 8) else tomorrow
+            prices = [0.99] * 24 if day == date(2026, 10, 8) else tomorrow
             return [{"dynamicPrice": p} for p in prices]
         if commodity == "gas":
             return [{"gas": {"usage": 1.0}}]
@@ -127,6 +172,10 @@ async def test_setup_and_sensors(hass: HomeAssistant, freezer: FrozenDateTimeFac
         patch(
             "custom_components.coolblue_prices.api.CoolblueApi.get_insights",
             new=AsyncMock(side_effect=fake_insights),
+        ),
+        patch(
+            "custom_components.coolblue_prices.api.CoolblueApi._get_rsc",
+            new=AsyncMock(side_effect=fake_rsc),
         ),
         patch("custom_components.coolblue_prices.api.CoolblueApi.close", new=AsyncMock()),
     ):

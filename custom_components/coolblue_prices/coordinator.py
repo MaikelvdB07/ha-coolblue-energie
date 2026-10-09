@@ -135,13 +135,26 @@ class CoolbluePriceCoordinator(DataUpdateCoordinator[PriceData]):
 
     # ── fetching ─────────────────────────────────────────────────────────────
 
-    async def _prices_for(self, day: date) -> list[PriceSlot]:
-        if day in self._cache:
-            return self._cache[day]
-        slots = await self.api.get_electricity_prices(self._debtor, self._location, day)
-        if slots:
-            self._cache[day] = slots
-        return slots
+    async def _fetch_prices(self, days: list[date]) -> None:
+        """Fill the cache for *days*: dashboard first, ``/api/insights`` as fallback."""
+        missing = [d for d in days if d not in self._cache]
+        if not missing:
+            return
+        try:
+            dashboard = await self.api.get_dashboard_prices()
+        except API_ERRORS as err:
+            _LOGGER.debug("Dashboardprijzen niet beschikbaar: %s", err)
+            dashboard = {}
+        # Keep every upcoming day the dashboard shows, even tomorrow before 13:00.
+        for day, slots in dashboard.items():
+            if day >= days[0]:
+                self._cache.setdefault(day, slots)
+        for day in missing:
+            if day in self._cache:
+                continue
+            slots = await self.api.get_electricity_prices(self._debtor, self._location, day)
+            if slots:
+                self._cache[day] = slots
 
     async def _async_update_data(self) -> PriceData:
         now = dt_util.now().astimezone(TZ_NL)
@@ -155,10 +168,12 @@ class CoolbluePriceCoordinator(DataUpdateCoordinator[PriceData]):
                 del self._cache[day]
 
         try:
-            today_slots = await self._prices_for(today)
-            tomorrow_slots: list[PriceSlot] = []
+            wanted = [today]
             if now.hour >= TOMORROW_AVAILABLE_FROM_HOUR:
-                tomorrow_slots = await self._prices_for(tomorrow)
+                wanted.append(tomorrow)
+            await self._fetch_prices(wanted)
+            today_slots = self._cache.get(today, [])
+            tomorrow_slots = self._cache.get(tomorrow, [])
 
             if self._gas is None or self._gas[0] < yesterday:
                 gas = await self.api.get_gas_price(self._debtor, self._location, yesterday)
@@ -171,8 +186,8 @@ class CoolbluePriceCoordinator(DataUpdateCoordinator[PriceData]):
 
         if not today_slots:
             _LOGGER.warning(
-                "Coolblue gaf geen prijzen voor vandaag (%s). Draai probe.py om te "
-                "zien wat de API teruggeeft.",
+                "Coolblue gaf geen prijzen voor vandaag (%s), niet op het dashboard en "
+                "niet via /api/insights. Draai probe.py om te zien wat er terugkomt.",
                 today,
             )
 

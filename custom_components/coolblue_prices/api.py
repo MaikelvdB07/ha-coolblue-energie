@@ -1,9 +1,12 @@
 """Client for the (undocumented) Coolblue Energie portal API.
 
 Login and the ``/api/insights`` endpoint follow the work in
-barisdemirdelen/homeassistant-coolblue-energy (MIT). Every hourly row that
-endpoint returns carries a ``dynamicPrice`` field (EUR/kWh); that is the price
-source for this integration.
+barisdemirdelen/homeassistant-coolblue-energy (MIT).
+
+Prices come primarily from the Coolblue Energie dashboard page, which embeds
+the day's all-in hourly prices as ``dynamicPrices`` (``[{timestamp, dynamicPrice}]``)
+in its Next.js RSC payload. ``/api/insights`` is the fallback, and the source
+for gas usage and costs.
 """
 
 from __future__ import annotations
@@ -25,6 +28,7 @@ _LOGGER = logging.getLogger(__name__)
 
 TZ_NL = ZoneInfo("Europe/Amsterdam")
 ENERGY_URL = "https://www.coolblue.nl/nl/mijn-coolblue-account/energie/energieverbruik"
+DASHBOARD_URL = "https://www.coolblue.nl/mijn-coolblue-account/energie"
 INSIGHTS_URL = "https://www.coolblue.nl/api/insights"
 
 API_ERRORS: tuple[type[Exception], ...] = (
@@ -101,6 +105,48 @@ def parse_price_rows(rows: list[dict[str, Any]], day: date) -> list[PriceSlot]:
     return slots
 
 
+def extract_rsc(html: str) -> str:
+    """The Next.js RSC payload embedded in a portal page, as one decoded string."""
+    chunks = re.findall(r'self\.__next_f\.push\(\[1,\s*"((?:[^"\\]|\\.)*)"]\)', html)
+    # Chunks may split a row anywhere, so join them without a separator.
+    return "".join(json.loads(f'"{c}"') for c in chunks)
+
+
+def parse_dynamic_prices(rsc: str) -> dict[date, list[PriceSlot]]:
+    """Read ``"dynamicPrices":[{timestamp, dynamicPrice}, ...]`` from an RSC payload.
+
+    Timestamps are UTC slot starts. Slots are grouped per Amsterdam day; each
+    slot ends where the next begins (the last one after the typical step).
+    """
+    match = re.search(r'"dynamicPrices"\s*:\s*(?=\[)', rsc)
+    if not match:
+        return {}
+    rows, _ = json.JSONDecoder().raw_decode(rsc, match.end())
+    points: list[tuple[datetime, float]] = []
+    for row in rows if isinstance(rows, list) else []:
+        if not isinstance(row, dict) or not isinstance(row.get("timestamp"), str):
+            continue
+        price = _to_float(row.get("dynamicPrice"))
+        if price is None:
+            continue
+        # RSC serialises Date objects as "$D<iso>".
+        ts = row["timestamp"].removeprefix("$D").replace("Z", "+00:00")
+        points.append((datetime.fromisoformat(ts).astimezone(TZ_NL), price))
+    points.sort()
+    if not points:
+        return {}
+
+    gaps = [b[0] - a[0] for a, b in zip(points, points[1:], strict=False)]
+    step = min(gaps, default=timedelta(hours=1))
+    days: dict[date, list[PriceSlot]] = {}
+    for i, (start, price) in enumerate(points):
+        end = points[i + 1][0] if i + 1 < len(points) else start + step
+        # A gap in the data must not stretch a slot over hours it doesn't cover.
+        days.setdefault(start.date(), []).append(PriceSlot(start, min(end, start + step), price))
+    # A day where every price is exactly 0 means "not published yet".
+    return {day: slots for day, slots in days.items() if any(s.price != 0 for s in slots)}
+
+
 def gas_price_from_rows(
     gas_rows: list[dict[str, Any]], cost_rows: list[dict[str, Any]]
 ) -> float | None:
@@ -154,21 +200,29 @@ class CoolblueApi:
 
     async def get_energy_ids(self) -> tuple[str, str]:
         """Return ``(debtor_number, location_uuid)`` from the energy page."""
-        session = await self._auth.get_session()
-        async with session.get(ENERGY_URL) as r:
-            r.raise_for_status()
-            html = await r.text()
-
-        chunks = re.findall(r'self\.__next_f\.push\(\[1,\s*"((?:[^"\\]|\\.)*)"]\)', html)
-        rsc = "\n".join(json.loads(f'"{c}"') for c in chunks)
+        rsc = await self._get_rsc(ENERGY_URL)
         debtor = re.search(r'"debtorNumber"\s*:\s*"(\d+)"', rsc)
         location = re.search(r'"locationId"\s*:\s*"([0-9a-f]{8}-[0-9a-f-]{27})"', rsc)
         if debtor and location:
             return debtor.group(1), location.group(1)
         raise RuntimeError(
-            "Kon debtorNumber/locationId niet vinden op de energiepagina "
-            f"({len(chunks)} RSC-chunks, {len(html)} tekens)."
+            f"Kon debtorNumber/locationId niet vinden op de energiepagina ({len(rsc)} tekens RSC)."
         )
+
+    async def _get_rsc(self, url: str) -> str:
+        """Fetch a portal page and return its RSC payload. Re-logs in once if needed."""
+        async with self._lock:
+            for attempt in range(2):
+                session = await self._auth.get_session()
+                async with session.get(url) as r:
+                    r.raise_for_status()
+                    rsc = extract_rsc(await r.text())
+                # A login page instead of the portal has no RSC payload.
+                if rsc or attempt:
+                    return rsc
+                _LOGGER.debug("Geen RSC-data op %s, opnieuw inloggen", url)
+                await self._auth.authenticate()
+        return ""
 
     # ── raw insights call ────────────────────────────────────────────────────
 
@@ -213,6 +267,10 @@ class CoolblueApi:
         return []
 
     # ── prices ───────────────────────────────────────────────────────────────
+
+    async def get_dashboard_prices(self) -> dict[date, list[PriceSlot]]:
+        """All-in prices shown on the Coolblue Energie dashboard, per day."""
+        return parse_dynamic_prices(await self._get_rsc(DASHBOARD_URL))
 
     async def get_electricity_prices(
         self, debtor: str, location: str, day: date
