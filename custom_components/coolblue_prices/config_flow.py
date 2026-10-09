@@ -62,7 +62,8 @@ _USER_SCHEMA = vol.Schema(
 _REAUTH_SCHEMA = vol.Schema({vol.Required(CONF_PASSWORD): _PASSWORD})
 
 
-def _euro(step: float = 0.00001, minimum: float = 0, maximum: float = 5) -> NumberSelector:
+def _euro(step: float | str = "any", minimum: float = 0, maximum: float = 5) -> NumberSelector:
+    # NumberSelector rejects steps below 0.001; contract rates have 6 decimals.
     return NumberSelector(
         NumberSelectorConfig(min=minimum, max=maximum, step=step, mode=NumberSelectorMode.BOX)
     )
