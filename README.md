@@ -122,13 +122,14 @@ series:
 ### Plotly Graph Card: vandaag
 
 Wil je een staafgrafiek met kleuren per prijsniveau, de laagste en hoogste prijs van de komende
-uren en een lijn bij "nu"? Gebruik dan de
+uren, een stippellijn met de huidige prijs bij "nu" en het lopende uur omlijnd? Gebruik dan de
 [Plotly Graph Card](https://github.com/dbuezas/lovelace-plotly-graph-card) (installeren via
 **HACS → Frontend**, zoek "plotly"). De kaart toont 6 uur terug en 12 uur vooruit, dus vanaf 14:30
 ook de eerste uren van morgen.
 
 ```yaml
 type: custom:plotly-graph
+disable_pinch_to_zoom: true
 title: Dynamische stroomprijs
 hours_to_show: 18
 time_offset: 12h
@@ -144,6 +145,7 @@ fn: |
     vars.now = {t: Date.now(), p: parseFloat(s?.state)}
     vars.now.h = "<b>" + vars.now.p.toFixed(3) + "</b> " + vars.unit_of_measurement + " @now"
     vars.avg = {p: 0, c: 0}
+    vars.opacity = []; vars.lw = []
     // Coolblue has no tariff groups: lowest third of prices = low, highest third = high.
     const sorted = prices.map(e => e.price).sort((a, b) => a - b)
     const lowMax = sorted[Math.floor(sorted.length / 3)]
@@ -166,6 +168,8 @@ fn: |
       vars.x.push(t)
       vars.y.push(p)
       vars.color.push(c)
+      vars.opacity.push(end <= Date.now() ? 0.4 : 1)   // past hours dimmed
+      vars.lw.push(start <= Date.now() && Date.now() < end ? 2 : 0)   // outline the current hour
       vars.hover.push(pad(new Date(start).getHours()) + "-" + pad(new Date(end).getHours()) +
         ": <b>" + p.toFixed(3) + "</b> " + vars.unit_of_measurement)
     })
@@ -175,12 +179,13 @@ fn: |
     vars.avg.h = "<b>" + vars.avg.p.toFixed(3) + "</b> " + vars.unit_of_measurement + " average"
   }
 layout:
+  dragmode: false
   margin:
     l: 20
     r: 20
     b: 40
   yaxis:
-    fixedrange: false
+    fixedrange: true
     tickformat: .2f
     range: $fn ({vars}) => [ vars.ymin-0.02, vars.ymax+0.02 ]
     showgrid: false
@@ -189,12 +194,20 @@ layout:
     showline: false
     title: null
   xaxis:
+    fixedrange: true
     tickformat: '%H'
     showgrid: false
     visible: true
     showticklabels: true
     showline: false
     dtick: 3600000
+  shapes: >-
+    $fn ({vars}) => [{type: 'line', xref: 'x', yref: 'paper', x0: vars.now.t, x1: vars.now.t,
+    y0: 0, y1: 1, line: {color: 'gray', width: 1.5, dash: 'dot'}}]
+  annotations: >-
+    $fn ({vars}) => isNaN(vars.now.p) ? [] : [{text: 'Nu <b>€ ' + vars.now.p.toFixed(3).replace('.', ',') + '</b>',
+    xref: 'x', yref: 'paper', x: vars.now.t, y: 1, xanchor: 'left', yanchor: 'top', xshift: 4,
+    showarrow: false, font: {size: 13}}]
 config:
   displayModeBar: false
   scrollZoom: false
@@ -206,6 +219,10 @@ entities:
     'y': $ex vars.y
     marker:
       color: $ex vars.color
+      opacity: $ex vars.opacity
+      line:
+        color: white
+        width: $ex vars.lw
     type: bar
     hovertemplate: $ex vars.hover
   - entity: ''
@@ -238,19 +255,6 @@ entities:
       - $ex vars.max.t
     'y':
       - $ex vars.max.p
-  - entity: ''
-    name: Now
-    hovertemplate: Now
-    yaxis: y9
-    showlegend: false
-    line:
-      width: 0.5
-      color: gray
-      opacity: 1
-    x: $ex [vars.now.t, vars.now.t]
-    'y':
-      - 0
-      - 1
 ```
 
 ### Plotly Graph Card: morgen
@@ -261,6 +265,7 @@ de prijzen nog niet heeft gepubliceerd, toont de kaart een melding.
 
 ```yaml
 type: custom:plotly-graph
+disable_pinch_to_zoom: true
 title: Stroomprijs morgen
 hours_to_show: $ex vars.hours
 time_offset: $ex vars.offset
@@ -310,12 +315,13 @@ fn: |
     vars.avg.h = "<b>" + vars.avg.p.toFixed(3) + "</b> " + vars.unit_of_measurement + " average"
   }
 layout:
+  dragmode: false
   margin:
     l: 20
     r: 20
     b: 40
   yaxis:
-    fixedrange: false
+    fixedrange: true
     tickformat: .2f
     range: $fn ({vars}) => [ vars.ymin-0.02, vars.ymax+0.02 ]
     showgrid: false
@@ -324,6 +330,7 @@ layout:
     showline: false
     title: null
   xaxis:
+    fixedrange: true
     tickformat: '%H'
     showgrid: false
     visible: true
